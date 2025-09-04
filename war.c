@@ -5,6 +5,7 @@
 
 #define TAMANHO_NOME 30
 #define TAMANHO_COR 10
+#define MAX_MISSAO 100
 
 // Definição da struct Territorio
 typedef struct
@@ -13,6 +14,171 @@ typedef struct
   char cor[TAMANHO_COR];   // Cor do exército
   int tropas;              // Quantidade de tropas
 } Territorio;
+
+// Protótipos das funções
+Territorio *cadastrarTerritorios(int n);
+void exibirTerritorios(Territorio *mapa, int n);
+void atacar(Territorio *atacante, Territorio *defensor);
+void liberarMemoria(Territorio *mapa, char **missoesJogadores, int nJogadores);
+int escolherTerritorio(Territorio *mapa, int n, const char *prompt);
+void atribuirMissao(char **missaoJogador, char *missoes[], int totalMissoes);
+int verificarMissao(char *missao, Territorio *mapa, int tamanho);
+void exibirMissao(char *missao);
+
+// Função principal
+int main()
+{
+  srand(time(NULL)); // Inicializa gerador de números aleatórios
+
+  int nTerritorios;
+
+  printf("Digite o numero total de territorios: ");
+  while (scanf("%d", &nTerritorios) != 1 || nTerritorios < 2)
+  {
+    printf("Entrada invalida. Digite um numero inteiro maior ou igual a 2: ");
+    while (getchar() != '\n')
+      ; // limpar buffer
+  }
+  while (getchar() != '\n')
+    ; // limpar buffer
+
+  // Cadastro dos territórios
+  Territorio *mapa = cadastrarTerritorios(nTerritorios);
+
+  // Definir número de jogadores (cores distintas)
+  // Para simplificar, vamos assumir que cada cor representa um jogador
+  // Contar cores distintas
+  int nJogadores = 0;
+  char coresEncontradas[nTerritorios][TAMANHO_COR];
+  for (int i = 0; i < nTerritorios; i++)
+  {
+    int achou = 0;
+    for (int j = 0; j < nJogadores; j++)
+    {
+      if (strcmp(mapa[i].cor, coresEncontradas[j]) == 0)
+      {
+        achou = 1;
+        break;
+      }
+    }
+    if (!achou)
+    {
+      strcpy(coresEncontradas[nJogadores], mapa[i].cor);
+      nJogadores++;
+    }
+  }
+
+  // Criar vetor de missões pré-definidas
+  char *missoes[] = {
+      "Conquistar 3 territorios seguidos",
+      "Eliminar todas as tropas da cor vermelha",
+      "Possuir pelo menos 10 tropas em um unico territorio",
+      "Controlar todos os territorios da cor azul",
+      "Ter pelo menos 5 territorios com mais de 3 tropas"};
+  int totalMissoes = sizeof(missoes) / sizeof(missoes[0]);
+
+  // Alocar dinamicamente as missões dos jogadores
+  char **missoesJogadores = (char **)malloc(nJogadores * sizeof(char *));
+  if (missoesJogadores == NULL)
+  {
+    printf("Erro na alocacao de memoria para missoes dos jogadores.\n");
+    liberarMemoria(mapa, NULL, 0);
+    exit(1);
+  }
+
+  // Atribuir missão para cada jogador
+  printf("\nAtribuindo missoes para os jogadores:\n");
+  for (int i = 0; i < nJogadores; i++)
+  {
+    missoesJogadores[i] = (char *)malloc(MAX_MISSAO * sizeof(char));
+    if (missoesJogadores[i] == NULL)
+    {
+      printf("Erro na alocacao de memoria para missao do jogador %d.\n", i + 1);
+      // Liberar já alocado
+      for (int k = 0; k < i; k++)
+        free(missoesJogadores[k]);
+      free(missoesJogadores);
+      liberarMemoria(mapa, NULL, 0);
+      exit(1);
+    }
+    atribuirMissao(&missoesJogadores[i], missoes, totalMissoes);
+    printf("Jogador %d (cor %s) recebeu a missao:\n", i + 1, coresEncontradas[i]);
+    exibirMissao(missoesJogadores[i]);
+    printf("\n");
+  }
+
+  int continuar = 1;
+  while (continuar)
+  {
+    exibirTerritorios(mapa, nTerritorios);
+
+    printf("\nEscolha o territorio atacante:\n");
+    int idxAtacante = escolherTerritorio(mapa, nTerritorios, "Numero do territorio atacante");
+
+    printf("Escolha o territorio defensor:\n");
+    int idxDefensor = escolherTerritorio(mapa, nTerritorios, "Numero do territorio defensor");
+
+    // Validar que atacante e defensor são diferentes
+    if (idxAtacante == idxDefensor)
+    {
+      printf("Atacante e defensor nao podem ser o mesmo territorio. Tente novamente.\n");
+      continue;
+    }
+
+    // Validar que não atacará território da mesma cor
+    if (strcmp(mapa[idxAtacante].cor, mapa[idxDefensor].cor) == 0)
+    {
+      printf("Nao e permitido atacar um territorio da mesma cor. Tente novamente.\n");
+      continue;
+    }
+
+    // Validar que atacante tem tropas suficientes para atacar (pelo menos 2)
+    if (mapa[idxAtacante].tropas < 2)
+    {
+      printf("Territorio atacante deve ter pelo menos 2 tropas para atacar. Escolha outro territorio.\n");
+      continue;
+    }
+
+    // Realizar o ataque
+    atacar(&mapa[idxAtacante], &mapa[idxDefensor]);
+
+    // Exibir territórios atualizados
+    exibirTerritorios(mapa, nTerritorios);
+
+    // Verificar se algum jogador cumpriu a missão
+    int vencedor = -1;
+    for (int i = 0; i < nJogadores; i++)
+    {
+      if (verificarMissao(missoesJogadores[i], mapa, nTerritorios))
+      {
+        vencedor = i;
+        break;
+      }
+    }
+
+    if (vencedor != -1)
+    {
+      printf("\nParabens! Jogador %d (cor %s) cumpriu sua missao e venceu o jogo!\n", vencedor + 1, coresEncontradas[vencedor]);
+      break;
+    }
+
+    // Perguntar se deseja continuar atacando
+    char resposta;
+    printf("Deseja realizar outro ataque? (s/n): ");
+    resposta = getchar();
+    while (getchar() != '\n')
+      ; // limpar buffer
+
+    if (resposta != 's' && resposta != 'S')
+      continuar = 0;
+  }
+
+  liberarMemoria(mapa, missoesJogadores, nJogadores);
+
+  printf("Jogo encerrado. Memoria liberada.\n");
+
+  return 0;
+}
 
 // Função para cadastrar os territórios dinamicamente
 Territorio *cadastrarTerritorios(int n)
@@ -116,9 +282,17 @@ void atacar(Territorio *atacante, Territorio *defensor)
 }
 
 // Função para liberar a memória alocada
-void liberarMemoria(Territorio *mapa)
+void liberarMemoria(Territorio *mapa, char **missoesJogadores, int nJogadores)
 {
   free(mapa);
+  if (missoesJogadores != NULL)
+  {
+    for (int i = 0; i < nJogadores; i++)
+    {
+      free(missoesJogadores[i]);
+    }
+    free(missoesJogadores);
+  }
 }
 
 // Função para escolher um território pelo índice, com validação
@@ -148,77 +322,89 @@ int escolherTerritorio(Territorio *mapa, int n, const char *prompt)
   return escolha - 1; // ajustar para índice 0-based
 }
 
-int main()
+// Função para sortear e atribuir uma missão para o jogador
+void atribuirMissao(char **missaoJogador, char *missoes[], int totalMissoes)
 {
-  srand(time(NULL)); // Inicializa gerador de números aleatórios
+  int idx = rand() % totalMissoes;
+  strcpy(*missaoJogador, missoes[idx]);
+}
 
-  int nTerritorios;
+// Função para exibir a missão (passagem por valor)
+void exibirMissao(char *missao)
+{
+  printf("Missao: %s\n", missao);
+}
 
-  printf("Digite o numero total de territorios: ");
-  while (scanf("%d", &nTerritorios) != 1 || nTerritorios < 2)
+// Função para verificar se a missão foi cumprida
+// Implementação simples para as missões definidas
+int verificarMissao(char *missao, Territorio *mapa, int tamanho)
+{
+  if (strcmp(missao, "Conquistar 3 territorios seguidos") == 0)
   {
-    printf("Entrada invalida. Digite um numero inteiro maior ou igual a 2: ");
-    while (getchar() != '\n')
-      ; // limpar buffer
+    // Verifica se existe alguma sequência de 3 territórios consecutivos da mesma cor
+    for (int i = 0; i < tamanho - 2; i++)
+    {
+      if (strcmp(mapa[i].cor, mapa[i + 1].cor) == 0 &&
+          strcmp(mapa[i].cor, mapa[i + 2].cor) == 0)
+      {
+        return 1;
+      }
+    }
+    return 0;
   }
-  while (getchar() != '\n')
-    ; // limpar buffer
-
-  // Cadastro dos territórios
-  Territorio *mapa = cadastrarTerritorios(nTerritorios);
-
-  int continuar = 1;
-  while (continuar)
+  else if (strcmp(missao, "Eliminar todas as tropas da cor vermelha") == 0)
   {
-    exibirTerritorios(mapa, nTerritorios);
-
-    printf("\nEscolha o territorio atacante:\n");
-    int idxAtacante = escolherTerritorio(mapa, nTerritorios, "Numero do territorio atacante");
-
-    printf("Escolha o territorio defensor:\n");
-    int idxDefensor = escolherTerritorio(mapa, nTerritorios, "Numero do territorio defensor");
-
-    // Validar que atacante e defensor são diferentes
-    if (idxAtacante == idxDefensor)
+    // Verifica se não existe nenhum território com cor "vermelha"
+    for (int i = 0; i < tamanho; i++)
     {
-      printf("Atacante e defensor nao podem ser o mesmo territorio. Tente novamente.\n");
-      continue;
+      if (strcmp(mapa[i].cor, "vermelha") == 0)
+        return 0;
     }
-
-    // Validar que não atacará território da mesma cor
-    if (strcmp(mapa[idxAtacante].cor, mapa[idxDefensor].cor) == 0)
-    {
-      printf("Nao e permitido atacar um territorio da mesma cor. Tente novamente.\n");
-      continue;
-    }
-
-    // Validar que atacante tem tropas suficientes para atacar (pelo menos 2)
-    if (mapa[idxAtacante].tropas < 2)
-    {
-      printf("Territorio atacante deve ter pelo menos 2 tropas para atacar. Escolha outro territorio.\n");
-      continue;
-    }
-
-    // Realizar o ataque
-    atacar(&mapa[idxAtacante], &mapa[idxDefensor]);
-
-    // Exibir territórios atualizados
-    exibirTerritorios(mapa, nTerritorios);
-
-    // Perguntar se deseja continuar atacando
-    char resposta;
-    printf("Deseja realizar outro ataque? (s/n): ");
-    resposta = getchar();
-    while (getchar() != '\n')
-      ; // limpar buffer
-
-    if (resposta != 's' && resposta != 'S')
-      continuar = 0;
+    return 1;
   }
-
-  liberarMemoria(mapa);
-
-  printf("Jogo encerrado. Memoria liberada.\n");
-
-  return 0;
+  else if (strcmp(missao, "Possuir pelo menos 10 tropas em um unico territorio") == 0)
+  {
+    // Verifica se existe algum território com 10 ou mais tropas da mesma cor
+    for (int i = 0; i < tamanho; i++)
+    {
+      if (mapa[i].tropas >= 10)
+        return 1;
+    }
+    return 0;
+  }
+  else if (strcmp(missao, "Controlar todos os territorios da cor azul") == 0)
+  {
+    // Verifica se o jogador controla todos os territórios que originalmente eram da cor azul
+    // Para simplificar, verifica se não existe território azul com cor diferente
+    for (int i = 0; i < tamanho; i++)
+    {
+      if (strcmp(mapa[i].nome, "") != 0) // território válido
+      {
+        // Se território era azul, verificar se ainda é azul
+        // Como não temos a cor original armazenada, vamos assumir que "azul" é a cor do jogador
+        // Então, verificar se existe algum território com cor diferente de azul
+        // Para simplificar, vamos verificar se existe algum território com cor diferente de "azul"
+        // Se existir, missão não cumprida
+        if (strcmp(mapa[i].cor, "azul") != 0)
+          return 0;
+      }
+    }
+    return 1;
+  }
+  else if (strcmp(missao, "Ter pelo menos 5 territorios com mais de 3 tropas") == 0)
+  {
+    // Verifica se o jogador possui pelo menos 5 territórios com mais de 3 tropas
+    int count = 0;
+    for (int i = 0; i < tamanho; i++)
+    {
+      if (mapa[i].tropas > 3)
+        count++;
+    }
+    return (count >= 5);
+  }
+  else
+  {
+    // Missão desconhecida, retorna 0
+    return 0;
+  }
 }
